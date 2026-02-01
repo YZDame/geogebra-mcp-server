@@ -1048,6 +1048,124 @@ export class GeoGebraInstance implements GeoGebraAPI {
   }
 
   /**
+   * Export construction as GeoGebra file (.ggb) in base64 format
+   */
+  async exportGGB(): Promise<string> {
+    this.ensureInitialized();
+    this.updateActivity();
+
+    return this.retryOperation(async () => {
+      const ggbBase64 = await this.page!.evaluate(() => {
+        try {
+          const applet = (window as any).ggbApplet;
+          if (!applet) {
+            throw new Error('GeoGebra applet not available');
+          }
+          
+          if (typeof applet.getBase64 !== 'function') {
+            throw new Error('getBase64 method not available on applet');
+          }
+
+          // Get the construction as base64-encoded .ggb file
+          const result = applet.getBase64();
+          
+          if (!result || typeof result !== 'string') {
+            throw new Error('getBase64 returned invalid result');
+          }
+          
+          return result;
+        } catch (error) {
+          throw new Error(`GGB export failed: ${error.message || error}`);
+        }
+      });
+
+      // Validate the result
+      if (!ggbBase64) {
+        throw new Error('GGB export returned null or undefined');
+      }
+      
+      if (typeof ggbBase64 !== 'string') {
+        throw new Error(`GGB export returned invalid type: ${typeof ggbBase64}`);
+      }
+      
+      if (ggbBase64.length === 0) {
+        throw new Error('GGB export returned empty string');
+      }
+      
+      // Validate base64 format
+      if (!/^[A-Za-z0-9+/]*={0,2}$/.test(ggbBase64)) {
+        throw new Error(`Result is not valid base64. Length: ${ggbBase64.length}`);
+      }
+      
+      // Check for minimum reasonable size
+      if (ggbBase64.length < 100) {
+        throw new Error(`GGB result suspiciously small (${ggbBase64.length} characters)`);
+      }
+
+      logger.debug(`GGB file exported from instance ${this.id}, result length: ${ggbBase64.length}`);
+      return ggbBase64;
+    }, 3, 1000, 'GGB export');
+  }
+
+  /**
+   * Load a GeoGebra construction from a .ggb file
+   * @param ggbBase64OrPath - Either base64-encoded .ggb content or file path
+   */
+  async loadGGB(ggbBase64OrPath: string): Promise<void> {
+    this.ensureInitialized();
+    this.updateActivity();
+
+    return this.retryOperation(async () => {
+      let ggbBase64 = ggbBase64OrPath;
+      
+      // Check if it's a file path (contains path separators or ends with .ggb)
+      if (ggbBase64OrPath.includes('/') || ggbBase64OrPath.includes('\\') || ggbBase64OrPath.endsWith('.ggb')) {
+        // It's a file path, read the file
+        const fs = await import('fs');
+        const path = await import('path');
+        
+        // Resolve path relative to workspace or current directory
+        const workspaceDir = process.env['VSCODE_WORKSPACE_FOLDER'] || process.cwd();
+        const fullPath = path.resolve(workspaceDir, ggbBase64OrPath);
+        
+        if (!fs.existsSync(fullPath)) {
+          throw new Error(`GGB file not found: ${fullPath}`);
+        }
+        
+        // Read file and convert to base64
+        const buffer = fs.readFileSync(fullPath);
+        ggbBase64 = buffer.toString('base64');
+      }
+      
+      // Validate base64 format
+      if (!/^[A-Za-z0-9+/]*={0,2}$/.test(ggbBase64)) {
+        throw new Error('Invalid base64 format for GGB data');
+      }
+      
+      await this.page!.evaluate((base64Data: string) => {
+        try {
+          const applet = (window as any).ggbApplet;
+          if (!applet) {
+            throw new Error('GeoGebra applet not available');
+          }
+          
+          if (typeof applet.setBase64 !== 'function') {
+            throw new Error('setBase64 method not available on applet');
+          }
+
+          // Load the construction from base64
+          applet.setBase64(base64Data);
+          
+        } catch (error) {
+          throw new Error(`GGB load failed: ${error.message || error}`);
+        }
+      }, ggbBase64);
+
+      logger.debug(`GGB file loaded into instance ${this.id}`);
+    }, 3, 1000, 'GGB load');
+  }
+
+  /**
    * Export animation as GIF or video frames
    * GEB-17: Enhanced with comprehensive applet availability checks
    */
