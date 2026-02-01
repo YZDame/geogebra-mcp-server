@@ -857,6 +857,10 @@ export const geogebraTools: ToolDefinition[] = [
           zoomPadding: {
             type: 'number',
             description: 'Padding percentage for auto-zoom (default: 0.2 for 20% margin)'
+          },
+          minRange: {
+            type: 'number',
+            description: 'Minimum range for each axis when auto-zooming (default: 2)'
           }
         },
         required: []
@@ -879,6 +883,7 @@ export const geogebraTools: ToolDefinition[] = [
         const showGrid = (params['showGrid'] as boolean) || false;
         const autoZoom = (params['autoZoom'] as boolean) || false;
         const zoomPadding = (params['zoomPadding'] as number) ?? 0.2;
+        const minRange = (params['minRange'] as number) ?? 2;
         
         // Validate and clamp values for safety
         if (scale !== undefined) {
@@ -898,58 +903,12 @@ export const geogebraTools: ToolDefinition[] = [
         
         // Auto-zoom if requested (and manual coordinates not provided)
         if (autoZoom && xmin === undefined && xmax === undefined && ymin === undefined && ymax === undefined) {
-          const objectNames = await instance.getAllObjectNames();
-          const allObjects = [];
-          for (const name of objectNames) {
-            const info = await instance.getObjectInfo(name);
-            if (info) {
-              allObjects.push(info);
-            }
-          }
-          
-          const visiblePoints = allObjects.filter((obj: any) =>
-            obj.type === 'point' && obj.visible && obj.defined &&
-            typeof obj.x === 'number' && typeof obj.y === 'number'
-          );
-          
-          if (visiblePoints.length > 0) {
-            let minX = Infinity;
-            let maxX = -Infinity;
-            let minY = Infinity;
-            let maxY = -Infinity;
-            
-            for (const point of visiblePoints) {
-              minX = Math.min(minX, point.x!);
-              maxX = Math.max(maxX, point.x!);
-              minY = Math.min(minY, point.y!);
-              maxY = Math.max(maxY, point.y!);
-            }
-            
-            let rangeX = maxX - minX;
-            let rangeY = maxY - minY;
-            const minRange = 2;
-            
-            if (rangeX < minRange) {
-              const center = (minX + maxX) / 2;
-              minX = center - minRange / 2;
-              maxX = center + minRange / 2;
-              rangeX = minRange;
-            }
-            
-            if (rangeY < minRange) {
-              const center = (minY + maxY) / 2;
-              minY = center - minRange / 2;
-              maxY = center + minRange / 2;
-              rangeY = minRange;
-            }
-            
-            const padX = rangeX * zoomPadding;
-            const padY = rangeY * zoomPadding;
-            
-            xmin = minX - padX;
-            xmax = maxX + padX;
-            ymin = minY - padY;
-            ymax = maxY + padY;
+          const coords = await instance.calculateAutoZoomCoordinates(zoomPadding, minRange);
+          if (coords) {
+            xmin = coords.xmin;
+            xmax = coords.xmax;
+            ymin = coords.ymin;
+            ymax = coords.ymax;
           }
         }
         
@@ -972,9 +931,9 @@ export const geogebraTools: ToolDefinition[] = [
         // If filename is provided, save to file
         if (filename) {
           const workspaceDir = process.env['VSCODE_WORKSPACE_FOLDER'] || process.cwd();
-          const fullPath = path.resolve(workspaceDir, filename);
+          const fullPath = instance['validateFilePath'](filename, workspaceDir);
           const buffer = Buffer.from(pngBase64, 'base64');
-          fs.writeFileSync(fullPath, buffer);
+          await fs.promises.writeFile(fullPath, buffer);
           
           return {
             content: [{
@@ -1253,66 +1212,13 @@ export const geogebraTools: ToolDefinition[] = [
         const filename = params['filename'] as string | undefined;
         const autoZoom = (params['autoZoom'] as boolean) || false;
         const zoomPadding = (params['zoomPadding'] as number) ?? 0.2;
+        const minRange = (params['minRange'] as number) ?? 2;
         
         const instance = await instancePool.getDefaultInstance();
         
         // Auto-zoom if requested
         if (autoZoom) {
-          const objectNames = await instance.getAllObjectNames();
-          const allObjects = [];
-          for (const name of objectNames) {
-            const info = await instance.getObjectInfo(name);
-            if (info) {
-              allObjects.push(info);
-            }
-          }
-          
-          const visiblePoints = allObjects.filter((obj: any) =>
-            obj.type === 'point' && obj.visible && obj.defined &&
-            typeof obj.x === 'number' && typeof obj.y === 'number'
-          );
-          
-          if (visiblePoints.length > 0) {
-            let minX = Infinity;
-            let maxX = -Infinity;
-            let minY = Infinity;
-            let maxY = -Infinity;
-            
-            for (const point of visiblePoints) {
-              minX = Math.min(minX, point.x!);
-              maxX = Math.max(maxX, point.x!);
-              minY = Math.min(minY, point.y!);
-              maxY = Math.max(maxY, point.y!);
-            }
-            
-            let rangeX = maxX - minX;
-            let rangeY = maxY - minY;
-            const minRange = 2;
-            
-            if (rangeX < minRange) {
-              const center = (minX + maxX) / 2;
-              minX = center - minRange / 2;
-              maxX = center + minRange / 2;
-              rangeX = minRange;
-            }
-            
-            if (rangeY < minRange) {
-              const center = (minY + maxY) / 2;
-              minY = center - minRange / 2;
-              maxY = center + minRange / 2;
-              rangeY = minRange;
-            }
-            
-            const padX = rangeX * zoomPadding;
-            const padY = rangeY * zoomPadding;
-            
-            const xmin = minX - padX;
-            const xmax = maxX + padX;
-            const ymin = minY - padY;
-            const ymax = maxY + padY;
-            
-            await instance.setCoordSystem(xmin, xmax, ymin, ymax);
-          }
+          await instance.applyAutoZoom(zoomPadding, minRange);
         }
         
         const pdfBase64 = await instance.exportPDF();
@@ -1320,9 +1226,9 @@ export const geogebraTools: ToolDefinition[] = [
         // If filename is provided, save to file
         if (filename) {
           const workspaceDir = process.env['VSCODE_WORKSPACE_FOLDER'] || process.cwd();
-          const fullPath = path.resolve(workspaceDir, filename);
+          const fullPath = instance['validateFilePath'](filename, workspaceDir);
           const buffer = Buffer.from(pdfBase64, 'base64');
-          fs.writeFileSync(fullPath, buffer);
+          await fs.promises.writeFile(fullPath, buffer);
           
           return {
             content: [{
@@ -1382,6 +1288,10 @@ export const geogebraTools: ToolDefinition[] = [
           zoomPadding: {
             type: 'number',
             description: 'Padding percentage for auto-zoom (default: 0.2 for 20% margin)'
+          },
+          minRange: {
+            type: 'number',
+            description: 'Minimum range for each axis when auto-zooming (default: 2)'
           }
         },
         required: []
@@ -1392,66 +1302,13 @@ export const geogebraTools: ToolDefinition[] = [
         const filename = params['filename'] as string | undefined;
         const autoZoom = (params['autoZoom'] as boolean) || false;
         const zoomPadding = (params['zoomPadding'] as number) ?? 0.2;
+        const minRange = (params['minRange'] as number) ?? 2;
         
         const instance = await instancePool.getDefaultInstance();
         
         // Auto-zoom if requested
         if (autoZoom) {
-          const objectNames = await instance.getAllObjectNames();
-          const allObjects = [];
-          for (const name of objectNames) {
-            const info = await instance.getObjectInfo(name);
-            if (info) {
-              allObjects.push(info);
-            }
-          }
-          
-          const visiblePoints = allObjects.filter((obj: any) =>
-            obj.type === 'point' && obj.visible && obj.defined &&
-            typeof obj.x === 'number' && typeof obj.y === 'number'
-          );
-          
-          if (visiblePoints.length > 0) {
-            let minX = Infinity;
-            let maxX = -Infinity;
-            let minY = Infinity;
-            let maxY = -Infinity;
-            
-            for (const point of visiblePoints) {
-              minX = Math.min(minX, point.x!);
-              maxX = Math.max(maxX, point.x!);
-              minY = Math.min(minY, point.y!);
-              maxY = Math.max(maxY, point.y!);
-            }
-            
-            let rangeX = maxX - minX;
-            let rangeY = maxY - minY;
-            const minRange = 2;
-            
-            if (rangeX < minRange) {
-              const center = (minX + maxX) / 2;
-              minX = center - minRange / 2;
-              maxX = center + minRange / 2;
-              rangeX = minRange;
-            }
-            
-            if (rangeY < minRange) {
-              const center = (minY + maxY) / 2;
-              minY = center - minRange / 2;
-              maxY = center + minRange / 2;
-              rangeY = minRange;
-            }
-            
-            const padX = rangeX * zoomPadding;
-            const padY = rangeY * zoomPadding;
-            
-            const xmin = minX - padX;
-            const xmax = maxX + padX;
-            const ymin = minY - padY;
-            const ymax = maxY + padY;
-            
-            await instance.setCoordSystem(xmin, xmax, ymin, ymax);
-          }
+          await instance.applyAutoZoom(zoomPadding, minRange);
         }
         
         const ggbBase64 = await instance.exportGGB();
@@ -1459,9 +1316,9 @@ export const geogebraTools: ToolDefinition[] = [
         // If filename is provided, save to file
         if (filename) {
           const workspaceDir = process.env['VSCODE_WORKSPACE_FOLDER'] || process.cwd();
-          const fullPath = path.resolve(workspaceDir, filename);
+          const fullPath = instance['validateFilePath'](filename, workspaceDir);
           const buffer = Buffer.from(ggbBase64, 'base64');
-          fs.writeFileSync(fullPath, buffer);
+          await fs.promises.writeFile(fullPath, buffer);
           
           return {
             content: [{

@@ -249,9 +249,25 @@ const result = await geogebra_auto_zoom({ padding: 0.2 });
 10. **Export optimization**: Auto-zoom ensures all objects are visible in saved images
 11. **Flexible input**: GGB load accepts both file paths and base64 data
 
+## Code Quality Improvements (GitHub Copilot Feedback)
+
+After the initial PR submission, GitHub Copilot identified several code quality and security issues. All critical and medium priority issues have been addressed:
+
+### Security Enhancements
+1. **Path Traversal Protection**: Added `validateFilePath()` method to prevent directory traversal attacks in all file operations
+2. **Async File Operations**: Replaced synchronous file operations (`fs.readFileSync`, `fs.writeFileSync`) with async versions (`fs.promises.readFile`, `fs.promises.writeFile`) to prevent event loop blocking
+
+### Code Quality Improvements
+3. **Eliminated Code Duplication**: Refactored auto-zoom logic into reusable helper methods (`calculateAutoZoomCoordinates()`, `applyAutoZoom()`), reducing ~275 lines of duplicated code to ~90 lines (67% reduction)
+4. **Consistent Error Handling**: Standardized error handling pattern across all tools to use `error instanceof Error ? error.message : String(error)`
+5. **Configurable minRange**: Added `minRange` parameter to all export tools for consistency with standalone auto-zoom tool
+
+See [`GITHUB_COPILOT_FIXES.md`](./GITHUB_COPILOT_FIXES.md) for detailed information about these improvements.
+
 ## Notes
 
-- All file operations use Node.js `fs.writeFileSync()` for simplicity
+- All file operations now use async Node.js `fs.promises` API
+- File paths are validated to prevent directory traversal attacks
 - File paths are resolved relative to workspace or current directory
 - TypeScript compilation required before changes take effect
 - No changes to package dependencies required
