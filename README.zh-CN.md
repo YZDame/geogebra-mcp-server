@@ -58,6 +58,30 @@ gebrai
 - `geogebra_eval_commands`
 - `geogebra_export_ggb`
 
+## 内置提示词框架（由客户端大模型生成）
+
+现在内置了 `geogebra_get_prompt_framework` 工具：
+
+- MCP 提供可复用的构图提示词框架
+- 由 Codex/Claude 等客户端大模型理解并生成命令序列
+- 再通过 `geogebra_eval_commands` 在 MCP 中执行
+
+也就是说：生成逻辑由客户端模型承担，不需要在 MCP 里额外配置服务端 LLM API Key。
+
+```mermaid
+flowchart LR
+  U["用户"] -->|"输入: 题目/作图需求"| C["Claude / Codex"]
+  C -->|"MCP 工具调用: 提示词框架 + 命令执行/导出"| M["GeoGebra MCP"]
+  M -->|"输出: 结构化结果 / .ggb 文件路径或数据"| C
+  C -->|"输出: 结果说明 + 文件交付"| U
+```
+
+工作原理简述：
+
+1. 用户只和 Claude/Codex 交互，输入题目。
+2. Claude/Codex 负责理解题意与生成命令，再通过 MCP 执行。
+3. MCP 负责 GeoGebra 侧能力（执行、查询、导出），并把结果返回给客户端。
+
 ## CLI 用法
 
 ```bash

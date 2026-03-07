@@ -60,6 +60,30 @@ Recommended fast path:
 - `geogebra_eval_commands`
 - `geogebra_export_ggb`
 
+## Prompt Framework (Client-Driven LLM)
+
+This server includes `geogebra_get_prompt_framework`:
+
+- MCP provides a reusable construction framework/prompt template
+- Client LLMs (Codex/Claude) read it and generate command sequences
+- MCP executes those commands via `geogebra_eval_commands`
+
+So generation remains client-driven, with no extra server-side LLM key requirement.
+
+```mermaid
+flowchart LR
+  U["User"] -->|"Input: problem / construction request"| C["Claude / Codex"]
+  C -->|"MCP calls: framework + execute/export tools"| M["GeoGebra MCP"]
+  M -->|"Output: structured results / .ggb path or data"| C
+  C -->|"Output: explanation + file delivery"| U
+```
+
+How it works:
+
+1. The user interacts only with Claude/Codex.
+2. Claude/Codex interprets the task and generates commands, then calls MCP tools.
+3. MCP handles GeoGebra-side execution/export and returns results to the client.
+
 ## CLI Options
 
 ```bash

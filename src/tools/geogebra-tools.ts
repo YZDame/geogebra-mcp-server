@@ -167,6 +167,38 @@ async function evalCommandWithLatexCaptionDefaults(
   };
 }
 
+function buildPromptFramework(mode: '2D' | '3D', task?: string): string {
+  const lines = [
+    `MODE: ${mode}`,
+    'Goal: Convert a geometry problem statement into reliable GeoGebra commands.',
+    '',
+    'Framework:',
+    '1) Extract entities and dependencies first (points, lines, circles, arcs, transformations).',
+    '2) Prefer dependency-based definitions over hard-coded coordinates when constraints are given.',
+    '3) Name intermediate objects explicitly (centers, radii, helper lines, helper points).',
+    '4) Build in small executable steps using geogebra_eval_commands.',
+    '5) After core geometry is valid, apply style commands (color, thickness, labels, visibility).',
+    '6) Export with geogebra_export_ggb.',
+    '',
+    'Output format requirement:',
+    '- Return pure command list, one command per line, no markdown fences, no prose.'
+  ];
+
+  if (task && task.trim()) {
+    lines.push('', 'Task:', task.trim());
+  }
+
+  lines.push(
+    '',
+    'Quality checklist:',
+    '- Every derived point should be defined from prior objects.',
+    '- Keep object relationships editable (sliders/rotations/midpoints remain live).',
+    '- Avoid breaking constraints by arbitrary absolute coordinates unless explicitly required.'
+  );
+
+  return lines.join('\n');
+}
+
 /**
  * GeoGebra MCP Tools
  */
@@ -322,6 +354,67 @@ export const geogebraTools: ToolDefinition[] = [
         };
       } catch (error) {
         logger.error('Failed to execute batch commands', error);
+        return {
+          content: [{
+            type: 'text' as const,
+            text: JSON.stringify({
+              success: false,
+              error: error instanceof Error ? error.message : String(error)
+            }, null, 2)
+          }],
+          isError: true
+        };
+      }
+    }
+  },
+
+  {
+    tool: {
+      name: 'geogebra_get_prompt_framework',
+      description: 'Get the built-in prompt framework for clients (Codex/Claude) to generate high-quality GeoGebra commands.',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          task: {
+            type: 'string',
+            description: 'Optional problem statement to inject into the framework.'
+          },
+          mode: {
+            type: 'string',
+            enum: ['2D', '3D'],
+            description: 'Target construction mode (default: 2D).'
+          }
+        },
+        required: []
+      }
+    },
+    handler: async (params) => {
+      try {
+        const mode = ((params['mode'] as string | undefined) || '2D') as '2D' | '3D';
+        const task = params['task'] as string | undefined;
+        const frameworkPrompt = buildPromptFramework(mode, task);
+
+        return {
+          content: [{
+            type: 'text' as const,
+            text: JSON.stringify({
+              success: true,
+              mode,
+              frameworkPrompt,
+              recommendedWorkflow: [
+                'geogebra_clear_construction',
+                'geogebra_eval_commands',
+                'geogebra_export_ggb'
+              ],
+              notes: [
+                'This MCP does not require an extra server-side API key for generation.',
+                'Client models (Codex/Claude) should read this framework and generate command lists.'
+              ]
+            }, null, 2)
+          }]
+        };
+      } catch (error) {
+        logger.error('Failed to return prompt framework', error);
         return {
           content: [{
             type: 'text' as const,
