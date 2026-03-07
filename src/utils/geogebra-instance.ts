@@ -345,14 +345,10 @@ export class GeoGebraInstance implements GeoGebraAPI {
     this.updateActivity();
 
     try {
-      const script = [
-        '(function(cmd) {',
-        '  const result = window.ggbApplet.evalCommandGetLabels(cmd);',
-        '  return result ? result.split(",").filter(function(label) { return label.trim(); }) : [];',
-        `})('${command.replace(/'/g, "\\'")}');`
-      ].join('\n');
-      
-      const labels = await this.page!.evaluate(script) as string[];
+      const labels = await this.page!.evaluate((cmd) => {
+        const result = (window as any).ggbApplet.evalCommandGetLabels(cmd);
+        return result ? result.split(',').filter((label: string) => label.trim()) : [];
+      }, command) as string[];
 
       logger.debug(`Command executed on instance ${this.id}, labels: ${labels.join(', ')}`);
       return labels;
@@ -432,6 +428,142 @@ export class GeoGebraInstance implements GeoGebraAPI {
     } catch (error) {
       logger.error(`Failed to get object names on instance ${this.id}`, error);
       return [];
+    }
+  }
+
+  /**
+   * Set each object's caption to LaTeX name form ($name$) and show caption label mode.
+   */
+  async applyLatexCaptionDefaults(objectNames: string[], showLabel: boolean = true): Promise<void> {
+    this.ensureInitialized();
+    this.updateActivity();
+
+    if (objectNames.length === 0) {
+      return;
+    }
+
+    const uniqueNames = Array.from(new Set(objectNames.filter(name => name && name.trim())));
+
+    if (uniqueNames.length === 0) {
+      return;
+    }
+
+    try {
+      const result = await this.page!.evaluate((names, shouldShowLabel) => {
+        const applet = (window as any).ggbApplet;
+        const failed: string[] = [];
+
+        for (const name of names) {
+          try {
+            if (!applet.exists(name)) {
+              failed.push(name);
+              continue;
+            }
+
+            applet.setCaption(name, `$${name}$`);
+            applet.setLabelStyle(name, 3);
+
+            if (shouldShowLabel) {
+              applet.setLabelVisible(name, true);
+            }
+          } catch (_error) {
+            failed.push(name);
+          }
+        }
+
+        return { failed };
+      }, uniqueNames, showLabel);
+
+      if (Array.isArray(result?.failed) && result.failed.length > 0) {
+        logger.warn(`Failed to apply LaTeX caption defaults for ${result.failed.length} object(s)`, {
+          instanceId: this.id,
+          failedObjects: result.failed
+        });
+      }
+    } catch (error) {
+      logger.error(`Failed to apply LaTeX caption defaults on instance ${this.id}`, {
+        objectNames: uniqueNames,
+        error
+      });
+      throw error;
+    }
+  }
+
+  /**
+   * Apply default visual style settings to objects.
+   * - Point-like objects: point size
+   * - Line-like objects: line thickness
+   */
+  async applyDefaultStyleSettings(
+    objectNames: string[],
+    pointSize: number,
+    lineThickness: number
+  ): Promise<void> {
+    this.ensureInitialized();
+    this.updateActivity();
+
+    if (objectNames.length === 0) {
+      return;
+    }
+
+    const uniqueNames = Array.from(new Set(objectNames.filter(name => name && name.trim())));
+    if (uniqueNames.length === 0) {
+      return;
+    }
+
+    try {
+      const result = await this.page!.evaluate((names, pointSizeValue, lineThicknessValue) => {
+        const applet = (window as any).ggbApplet;
+        const failed: string[] = [];
+
+        const pointTypes = new Set(['point']);
+        const lineTypes = new Set([
+          'line',
+          'segment',
+          'ray',
+          'vector',
+          'circle',
+          'conic',
+          'polygon',
+          'function',
+          'curve'
+        ]);
+
+        for (const name of names) {
+          try {
+            if (!applet.exists(name)) {
+              failed.push(name);
+              continue;
+            }
+
+            const rawType = String(applet.getObjectType(name) || '').toLowerCase();
+            if (pointTypes.has(rawType)) {
+              applet.setPointSize(name, pointSizeValue);
+            } else if (lineTypes.has(rawType)) {
+              applet.setLineThickness(name, lineThicknessValue);
+            }
+          } catch (_error) {
+            failed.push(name);
+          }
+        }
+
+        return { failed };
+      }, uniqueNames, pointSize, lineThickness);
+
+      if (Array.isArray(result?.failed) && result.failed.length > 0) {
+        logger.warn(`Failed to apply default style settings for ${result.failed.length} object(s)`, {
+          instanceId: this.id,
+          failedObjects: result.failed
+        });
+      }
+    } catch (error) {
+      logger.error(`Failed to apply default style settings on instance ${this.id}`, {
+        objectNames: uniqueNames,
+        pointSize,
+        lineThickness,
+        error
+      });
+      throw error;
     }
   }
 

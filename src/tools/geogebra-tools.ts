@@ -1,3 +1,4 @@
+import { GeoGebraCommandResult } from '../types/geogebra';
 import { ToolDefinition } from '../types/mcp';
 // import { MockGeoGebraInstance } from '../utils/geogebra-mock'; // Mock implementation for testing
 import { GeoGebraInstance } from '../utils/geogebra-instance'; // Real implementation (production)
@@ -68,6 +69,8 @@ class GeoGebraInstancePool {
 }
 
 const instancePool = new GeoGebraInstancePool();
+const DEFAULT_LINE_THICKNESS = 2;
+const DEFAULT_POINT_SIZE = 2;
 
 // Cleanup on process exit
 process.on('exit', () => {
@@ -113,6 +116,57 @@ async function saveExportFile(
   return fullPath;
 }
 
+async function applyLatexCaptionDefaults(
+  instance: GeoGebraInstance,
+  objectNames: string[]
+): Promise<void> {
+  if (objectNames.length === 0) {
+    return;
+  }
+
+  await instance.applyLatexCaptionDefaults(objectNames, true);
+}
+
+async function applyDefaultStyleSettings(
+  instance: GeoGebraInstance,
+  objectNames: string[]
+): Promise<void> {
+  if (objectNames.length === 0) {
+    return;
+  }
+
+  await instance.applyDefaultStyleSettings(
+    objectNames,
+    DEFAULT_POINT_SIZE,
+    DEFAULT_LINE_THICKNESS
+  );
+}
+
+async function applyObjectDefaults(
+  instance: GeoGebraInstance,
+  objectNames: string[]
+): Promise<void> {
+  if (objectNames.length === 0) {
+    return;
+  }
+
+  await applyLatexCaptionDefaults(instance, objectNames);
+  await applyDefaultStyleSettings(instance, objectNames);
+}
+
+async function evalCommandWithLatexCaptionDefaults(
+  instance: GeoGebraInstance,
+  command: string
+): Promise<GeoGebraCommandResult> {
+  const labels = await instance.evalCommandGetLabels(command);
+  await applyObjectDefaults(instance, labels);
+
+  return {
+    success: true,
+    labels
+  };
+}
+
 /**
  * GeoGebra MCP Tools
  */
@@ -137,7 +191,7 @@ export const geogebraTools: ToolDefinition[] = [
         const command = params['command'] as string;
         const instance = await instancePool.getDefaultInstance();
         
-        const result = await instance.evalCommand(command);
+        const result = await evalCommandWithLatexCaptionDefaults(instance, command);
         
         return {
           content: [{
@@ -145,6 +199,7 @@ export const geogebraTools: ToolDefinition[] = [
             text: JSON.stringify({
               success: result.success,
               command,
+              labels: result.labels,
               result: result.result,
               error: result.error
             }, null, 2)
@@ -220,7 +275,7 @@ export const geogebraTools: ToolDefinition[] = [
             continue;
           }
 
-          const execution = await instance.evalCommand(command);
+          const execution = await evalCommandWithLatexCaptionDefaults(instance, command);
           const commandResult: { index: number; command: string; success: boolean; result?: unknown; error?: string } = {
             index: i,
             command,
@@ -229,6 +284,11 @@ export const geogebraTools: ToolDefinition[] = [
 
           if (execution.result !== undefined) {
             commandResult.result = execution.result;
+          }
+          if (execution.labels !== undefined) {
+            commandResult.result = commandResult.result === undefined
+              ? { labels: execution.labels }
+              : { output: commandResult.result, labels: execution.labels };
           }
           if (execution.error !== undefined) {
             commandResult.error = execution.error;
@@ -319,7 +379,7 @@ export const geogebraTools: ToolDefinition[] = [
         const command = `${name} = (${x}, ${y})`;
         const instance = await instancePool.getDefaultInstance();
         
-        const result = await instance.evalCommand(command);
+        const result = await evalCommandWithLatexCaptionDefaults(instance, command);
         
         if (result.success) {
           const pointInfo = await instance.getObjectInfo(name);
@@ -422,7 +482,7 @@ export const geogebraTools: ToolDefinition[] = [
         }
         
         const instance = await instancePool.getDefaultInstance();
-        const result = await instance.evalCommand(command);
+        const result = await evalCommandWithLatexCaptionDefaults(instance, command);
         
         if (result.success) {
           const lineInfo = await instance.getObjectInfo(name);
@@ -544,7 +604,7 @@ export const geogebraTools: ToolDefinition[] = [
         }
         
         const instance = await instancePool.getDefaultInstance();
-        const result = await instance.evalCommand(command);
+        const result = await evalCommandWithLatexCaptionDefaults(instance, command);
         
         if (result.success) {
           const circleInfo = await instance.getObjectInfo(name);
@@ -622,7 +682,7 @@ export const geogebraTools: ToolDefinition[] = [
         const command = `${name} = Polygon(${verticesStr})`;
         
         const instance = await instancePool.getDefaultInstance();
-        const result = await instance.evalCommand(command);
+        const result = await evalCommandWithLatexCaptionDefaults(instance, command);
         
         if (result.success) {
           const polygonInfo = await instance.getObjectInfo(name);
@@ -1415,6 +1475,9 @@ export const geogebraTools: ToolDefinition[] = [
         const minRange = (params['minRange'] as number) ?? 2;
         
         const instance = await instancePool.getDefaultInstance();
+
+        const allObjectNames = await instance.getAllObjectNames();
+        await applyObjectDefaults(instance, allObjectNames);
         
         // Auto-zoom if requested
         if (autoZoom) {
@@ -1616,7 +1679,7 @@ export const geogebraTools: ToolDefinition[] = [
           command = `${name}(x) = ${expression}`;
         }
 
-        const result = await instance.evalCommand(command);
+        const result = await evalCommandWithLatexCaptionDefaults(instance, command);
         
         if (!result.success) {
           throw new Error(result.error || 'Failed to create function');
@@ -1769,7 +1832,7 @@ export const geogebraTools: ToolDefinition[] = [
         // Create the parametric curve using GeoGebra's Curve command
         const command = `${name} = Curve(${xExpression}, ${yExpression}, ${parameter}, ${tMin}, ${tMax})`;
 
-        const result = await instance.evalCommand(command);
+        const result = await evalCommandWithLatexCaptionDefaults(instance, command);
         
         if (!result.success) {
           throw new Error(result.error || 'Failed to create parametric curve');
@@ -1900,7 +1963,7 @@ export const geogebraTools: ToolDefinition[] = [
         // Create the implicit curve using GeoGebra's ImplicitCurve command
         const command = `${name} = ImplicitCurve(${expression})`;
 
-        const result = await instance.evalCommand(command);
+        const result = await evalCommandWithLatexCaptionDefaults(instance, command);
         
         if (!result.success) {
           throw new Error(result.error || 'Failed to create implicit curve');
@@ -2010,7 +2073,7 @@ export const geogebraTools: ToolDefinition[] = [
           `Solve(${equation}, ${variable})` : 
           `Solve(${equation})`;
 
-        const result = await instance.evalCommand(command);
+        const result = await evalCommandWithLatexCaptionDefaults(instance, command);
         
         if (!result.success) {
           throw new Error(result.error || 'Failed to solve equation');
@@ -2326,7 +2389,7 @@ export const geogebraTools: ToolDefinition[] = [
         const command = `${derivativeObjectName} = Derivative(${expression}, ${variable})`;
 
         // Execute the command to create the derivative object
-        const result = await instance.evalCommand(command);
+        const result = await evalCommandWithLatexCaptionDefaults(instance, command);
         
         if (!result.success) {
           throw new Error(result.error || 'Failed to compute derivative');
@@ -2417,7 +2480,7 @@ export const geogebraTools: ToolDefinition[] = [
         const command = `${integralObjectName} = Integral(${expression}, ${variable})`;
 
         // Execute the command to create the integral object
-        const result = await instance.evalCommand(command);
+        const result = await evalCommandWithLatexCaptionDefaults(instance, command);
         
         if (!result.success) {
           throw new Error(result.error || 'Failed to compute integral');
@@ -2497,7 +2560,7 @@ export const geogebraTools: ToolDefinition[] = [
         const command = `${simplifiedObjectName} = Simplify(${expression})`;
 
         // Execute the command to create the simplified object
-        const result = await instance.evalCommand(command);
+        const result = await evalCommandWithLatexCaptionDefaults(instance, command);
         
         if (!result.success) {
           throw new Error(result.error || 'Failed to simplify expression');
@@ -2608,7 +2671,7 @@ export const geogebraTools: ToolDefinition[] = [
         // Create GeoGebra slider command
         const command = `${name} = Slider(${min}, ${max}, ${increment}, 1, ${width}, ${isAngle}, ${horizontal}, false, false)`;
 
-        const result = await instance.evalCommand(command);
+        const result = await evalCommandWithLatexCaptionDefaults(instance, command);
         
         if (!result.success) {
           throw new Error(result.error || 'Failed to create slider');
@@ -3320,7 +3383,7 @@ export const geogebraTools: ToolDefinition[] = [
         
         // Create the line segment
         const command = `${name} = Segment(${point1}, ${point2})`;
-        const result = await instance.evalCommand(command);
+        const result = await evalCommandWithLatexCaptionDefaults(instance, command);
         
         if (!result.success) {
           throw new Error(result.error || 'Failed to create line segment');
@@ -3459,7 +3522,7 @@ export const geogebraTools: ToolDefinition[] = [
         
         // Create the text object
         const command = `${name} = Text(${formattedText}, (${x}, ${y}))`;
-        const result = await instance.evalCommand(command);
+        const result = await evalCommandWithLatexCaptionDefaults(instance, command);
         
         if (!result.success) {
           throw new Error(result.error || 'Failed to create text');
