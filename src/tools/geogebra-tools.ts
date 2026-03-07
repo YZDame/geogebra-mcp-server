@@ -71,6 +71,13 @@ class GeoGebraInstancePool {
 const instancePool = new GeoGebraInstancePool();
 const DEFAULT_LINE_THICKNESS = 2;
 const DEFAULT_POINT_SIZE = 2;
+const LABEL_MODE_VALUES = ['all', 'none', 'points_only', 'specified'] as const;
+type LabelVisibilityMode = typeof LABEL_MODE_VALUES[number];
+
+interface LabelVisibilityOptions {
+  mode: LabelVisibilityMode;
+  visibleLabels?: string[];
+}
 
 // Cleanup on process exit
 process.on('exit', () => {
@@ -124,7 +131,16 @@ async function applyLatexCaptionDefaults(
     return;
   }
 
-  await instance.applyLatexCaptionDefaults(objectNames, true);
+  const captionCapableInstance = instance as unknown as {
+    applyLatexCaptionDefaults?: (names: string[], showLabel?: boolean) => Promise<void>;
+  };
+
+  if (typeof captionCapableInstance.applyLatexCaptionDefaults !== 'function') {
+    return;
+  }
+
+  // Label visibility is controlled separately to support point-only / whitelist modes.
+  await captionCapableInstance.applyLatexCaptionDefaults(objectNames, false);
 }
 
 async function applyDefaultStyleSettings(
@@ -135,16 +151,118 @@ async function applyDefaultStyleSettings(
     return;
   }
 
-  await instance.applyDefaultStyleSettings(
+  const styleCapableInstance = instance as unknown as {
+    applyDefaultStyleSettings?: (names: string[], pointSize: number, lineThickness: number) => Promise<void>;
+  };
+
+  if (typeof styleCapableInstance.applyDefaultStyleSettings !== 'function') {
+    return;
+  }
+
+  await styleCapableInstance.applyDefaultStyleSettings(
     objectNames,
     DEFAULT_POINT_SIZE,
     DEFAULT_LINE_THICKNESS
   );
 }
 
+function normalizeVisibleLabels(value: unknown): string[] {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+
+  const labels = value
+    .filter((item): item is string => typeof item === 'string')
+    .map(item => item.trim())
+    .filter(item => item.length > 0);
+
+  return Array.from(new Set(labels));
+}
+
+function parseLabelMode(value: unknown): LabelVisibilityMode | undefined {
+  if (typeof value !== 'string') {
+    return undefined;
+  }
+
+  const normalized = value.trim().toLowerCase();
+  if ((LABEL_MODE_VALUES as readonly string[]).includes(normalized)) {
+    return normalized as LabelVisibilityMode;
+  }
+  return undefined;
+}
+
+async function setSingleLabelVisibility(
+  instance: GeoGebraInstance,
+  objectName: string,
+  visible: boolean
+): Promise<void> {
+  const desired = visible ? 'true' : 'false';
+  const rawCommand = `SetLabelVisible(${objectName}, ${desired})`;
+  const result = await instance.evalCommand(rawCommand);
+
+  if (result.success) {
+    return;
+  }
+
+  // Retry with quoted name for labels that need explicit string reference.
+  const quotedName = JSON.stringify(objectName);
+  const quotedCommand = `SetLabelVisible(${quotedName}, ${desired})`;
+  const fallbackResult = await instance.evalCommand(quotedCommand);
+  if (!fallbackResult.success) {
+    throw new Error(fallbackResult.error || `Failed to set label visibility for ${objectName}`);
+  }
+}
+
+async function applyLabelVisibilityPolicy(
+  instance: GeoGebraInstance,
+  objectNames: string[],
+  options: LabelVisibilityOptions
+): Promise<void> {
+  if (objectNames.length === 0) {
+    return;
+  }
+
+  const uniqueNames = Array.from(new Set(objectNames.filter(name => name && name.trim())));
+  if (uniqueNames.length === 0) {
+    return;
+  }
+
+  const visibleSet = new Set(options.visibleLabels ?? []);
+  const failed: string[] = [];
+
+  for (const name of uniqueNames) {
+    try {
+      let visible = false;
+
+      if (options.mode === 'all') {
+        visible = true;
+      } else if (options.mode === 'specified') {
+        visible = visibleSet.has(name);
+      } else if (options.mode === 'points_only') {
+        const info = await instance.getObjectInfo(name);
+        visible = (info?.type?.toLowerCase() || '') === 'point';
+      } else {
+        visible = false;
+      }
+
+      await setSingleLabelVisibility(instance, name, visible);
+    } catch (_error) {
+      failed.push(name);
+    }
+  }
+
+  if (failed.length > 0) {
+    logger.warn(`Failed to apply label visibility for ${failed.length} object(s)`, {
+      failedObjects: failed,
+      labelMode: options.mode
+    });
+  }
+}
+
 async function applyObjectDefaults(
   instance: GeoGebraInstance,
-  objectNames: string[]
+  objectNames: string[],
+  labelOptions: LabelVisibilityOptions = { mode: 'points_only' }
 ): Promise<void> {
   if (objectNames.length === 0) {
     return;
@@ -152,18 +270,35 @@ async function applyObjectDefaults(
 
   await applyLatexCaptionDefaults(instance, objectNames);
   await applyDefaultStyleSettings(instance, objectNames);
+  await applyLabelVisibilityPolicy(instance, objectNames, labelOptions);
 }
 
 async function evalCommandWithLatexCaptionDefaults(
   instance: GeoGebraInstance,
   command: string
 ): Promise<GeoGebraCommandResult> {
-  const labels = await instance.evalCommandGetLabels(command);
-  await applyObjectDefaults(instance, labels);
+  const labelCapableInstance = instance as unknown as {
+    evalCommandGetLabels?: (cmd: string) => Promise<string[]>;
+  };
+
+  if (typeof labelCapableInstance.evalCommandGetLabels === 'function') {
+    const labels = await labelCapableInstance.evalCommandGetLabels(command);
+    await applyObjectDefaults(instance, labels);
+
+    return {
+      success: true,
+      labels
+    };
+  }
+
+  const fallbackResult = await instance.evalCommand(command);
+  if (!fallbackResult.success) {
+    return fallbackResult;
+  }
 
   return {
     success: true,
-    labels
+    labels: []
   };
 }
 
@@ -193,7 +328,8 @@ function buildPromptFramework(mode: '2D' | '3D', task?: string): string {
     'Quality checklist:',
     '- Every derived point should be defined from prior objects.',
     '- Keep object relationships editable (sliders/rotations/midpoints remain live).',
-    '- Avoid breaking constraints by arbitrary absolute coordinates unless explicitly required.'
+    '- Avoid breaking constraints by arbitrary absolute coordinates unless explicitly required.',
+    '- Keep labels minimal: hide labels for objects not explicitly required by the problem/figure.'
   );
 
   return lines.join('\n');
@@ -1162,7 +1298,7 @@ export const geogebraTools: ToolDefinition[] = [
           minRange: {
             type: 'number',
             description: 'Minimum range for each axis when auto-zooming (default: 2)'
-          }
+          },
         },
         required: []
       }
@@ -1464,7 +1600,7 @@ export const geogebraTools: ToolDefinition[] = [
           minRange: {
             type: 'number',
             description: 'Minimum range for each axis when auto-zooming (default: 2)'
-          }
+          },
         },
         required: []
       }
@@ -1555,6 +1691,18 @@ export const geogebraTools: ToolDefinition[] = [
           minRange: {
             type: 'number',
             description: 'Minimum range for each axis when auto-zooming (default: 2)'
+          },
+          labelMode: {
+            type: 'string',
+            enum: ['all', 'none', 'points_only', 'specified'],
+            description: 'Label visibility mode before export (default: points_only).'
+          },
+          visibleLabels: {
+            type: 'array',
+            items: {
+              type: 'string'
+            },
+            description: 'Explicit label whitelist. If provided, only these labels are shown (equivalent to labelMode=specified).'
           }
         },
         required: []
@@ -1566,11 +1714,22 @@ export const geogebraTools: ToolDefinition[] = [
         const autoZoom = (params['autoZoom'] as boolean) || false;
         const zoomPadding = (params['zoomPadding'] as number) ?? 0.2;
         const minRange = (params['minRange'] as number) ?? 2;
+        const visibleLabels = normalizeVisibleLabels(params['visibleLabels']);
+        const parsedLabelMode = parseLabelMode(params['labelMode']);
+        const requestedLabelModeRaw = params['labelMode'];
+
+        if (requestedLabelModeRaw !== undefined && !parsedLabelMode) {
+          throw new Error(`Invalid labelMode. Allowed values: ${LABEL_MODE_VALUES.join(', ')}`);
+        }
+
+        const labelOptions: LabelVisibilityOptions = visibleLabels.length > 0
+          ? { mode: 'specified', visibleLabels }
+          : { mode: parsedLabelMode ?? 'points_only' };
         
         const instance = await instancePool.getDefaultInstance();
 
         const allObjectNames = await instance.getAllObjectNames();
-        await applyObjectDefaults(instance, allObjectNames);
+        await applyObjectDefaults(instance, allObjectNames, labelOptions);
         
         // Auto-zoom if requested
         if (autoZoom) {
@@ -1589,7 +1748,9 @@ export const geogebraTools: ToolDefinition[] = [
                 success: true,
                 format: 'GGB',
                 saved: true,
-                filename: savedPath
+                filename: savedPath,
+                labelMode: labelOptions.mode,
+                visibleLabels: labelOptions.visibleLabels
               }, null, 2)
             }]
           };
@@ -1599,12 +1760,14 @@ export const geogebraTools: ToolDefinition[] = [
           content: [{
             type: 'text' as const,
             text: JSON.stringify({
-              success: true,
-              format: 'GGB',
-              saveTarget: requestedFilename,
-              data: ggbBase64,
-              encoding: 'base64'
-            }, null, 2)
+                success: true,
+                format: 'GGB',
+                saveTarget: requestedFilename,
+                labelMode: labelOptions.mode,
+                visibleLabels: labelOptions.visibleLabels,
+                data: ggbBase64,
+                encoding: 'base64'
+              }, null, 2)
           }]
         };
       } catch (error) {

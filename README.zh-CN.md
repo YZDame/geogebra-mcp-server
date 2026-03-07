@@ -52,6 +52,10 @@ gebrai
 2. 客户端通过 MCP 调用本项目工具构造图形。
 3. 调用 `geogebra_export_ggb` 导出到 `output/*.ggb`。
 
+`geogebra_export_ggb` 标签控制：
+- 默认标签模式是 `points_only`（圆、线段、直线等标签默认隐藏）。
+- 传入 `visibleLabels` 可只显示题目/配图中明确出现的标签。
+
 推荐高效链路：
 
 - `geogebra_clear_construction`

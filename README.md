@@ -54,6 +54,10 @@ Claude Desktop example:
 2. The client calls MCP tools to build the construction.
 3. Call `geogebra_export_ggb` to write `output/*.ggb`.
 
+`geogebra_export_ggb` label controls:
+- Default label mode is `points_only` (circle/segment/line labels are hidden).
+- Pass `visibleLabels` to show only labels explicitly present in the target problem/figure.
+
 Recommended fast path:
 
 - `geogebra_clear_construction`
