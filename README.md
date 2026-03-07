@@ -1,14 +1,14 @@
 # GeoGebra MCP Tool
 
-GeoGebra 的 MCP Server，实现几何构造、函数绘图和文件导出（含 `.ggb`）。
+A GeoGebra MCP server for geometric construction, function plotting, and file export (including `.ggb`).
 
-中文文档入口: [README.zh-CN.md](README.zh-CN.md)
+Chinese documentation: [README.zh-CN.md](README.zh-CN.md)
 
 ## What This Project Is
 
-- 这是一个 **MCP Server**，不是聊天应用。
-- 自然语言理解由 Claude/Codex 等客户端完成。
-- 本项目负责执行 GeoGebra 工具调用并导出文件。
+- This is an **MCP server**, not a chat app.
+- Natural-language understanding is handled by clients such as Claude/Codex.
+- This project executes GeoGebra tool calls and exports output files.
 
 ## Quick Start
 
@@ -25,17 +25,17 @@ npm run build
 node dist/cli.js
 ```
 
-或：
+Or:
 
 ```bash
 npx @gebrai/gebrai
-# 或全局安装后
+# or after global install
 gebrai
 ```
 
 ### 3. Connect as MCP
 
-以 Claude Desktop 为例：
+Claude Desktop example:
 
 ```json
 {
@@ -50,11 +50,12 @@ gebrai
 
 ## Typical Flow (Natural Language -> .ggb)
 
-1. 在 Claude/Codex 中输入自然语言几何题目。
-2. 客户端调用 MCP 工具构造图形。
-3. 调用 `geogebra_export_ggb` 导出到 `output/*.ggb`。
+1. Describe a geometry problem in Claude/Codex.
+2. The client calls MCP tools to build the construction.
+3. Call `geogebra_export_ggb` to write `output/*.ggb`.
 
-推荐高效链路：
+Recommended fast path:
+
 - `geogebra_clear_construction`
 - `geogebra_eval_commands`
 - `geogebra_export_ggb`
@@ -70,14 +71,14 @@ node dist/cli.js --log-level debug
 ## Project Structure
 
 ```text
-src/          # 核心实现
-tests/        # 测试
-package.json  # 依赖与脚本
-tsconfig.json # TS 配置
+src/          # core implementation
+tests/        # tests
+package.json  # scripts and dependencies
+tsconfig.json # TypeScript config
 jest.config.js
 ```
 
 ## Notes
 
-- 项目可以直接导出 `.ggb`。
-- 若你修改了源码，需重新执行 `npm run build` 后客户端才会使用新逻辑。
+- This project can export `.ggb` directly.
+- After source changes, run `npm run build` so clients use the updated logic.
