@@ -2,6 +2,8 @@
 
 GeoGebra 的 MCP Server，实现几何构造、函数绘图和文件导出（含 `.ggb`）。
 
+中文文档入口: [README.zh-CN.md](README.zh-CN.md)
+
 ## What This Project Is
 
 - 这是一个 **MCP Server**，不是聊天应用。
