@@ -24,8 +24,6 @@
     "test:watch": "jest --watch",
     "test:ci": "jest --ci --coverage --watchAll=false",
     "test:coverage": "jest --coverage",
-    "test:compatibility": "npx ts-node test-gemini-compatibility.ts",
-    "test:schema": "npx ts-node test-schema-compatibility.ts",
     "lint": "eslint src/**/*.ts",
     "lint:fix": "eslint src/**/*.ts --fix",
     "format": "prettier --write src/**/*.ts",
