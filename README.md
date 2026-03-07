@@ -2,7 +2,7 @@
 
 A GeoGebra MCP server for geometric construction, function plotting, and file export (including `.ggb`).
 
-Chinese documentation: [README.zh-CN.md](README.zh-CN.md)
+中文说明请看: [README.zh-CN.md](README.zh-CN.md)
 
 ## What This Project Is
 
@@ -87,6 +87,25 @@ How it works:
 1. The user interacts only with Claude/Codex.
 2. Claude/Codex interprets the task and generates commands, then calls MCP tools.
 3. MCP handles GeoGebra-side execution/export and returns results to the client.
+
+## Features
+
+This server currently exposes 45 tools in 4 groups:
+
+- Basic server/debug tools: `echo`, `ping`, `server_info`
+- GeoGebra core tools: construction, object queries, plotting, CAS, animation, import/export, prompt framework
+- Educational tools: template listing/loading and lesson plan generation
+- Performance tools: metrics, pool stats, warm-up, benchmark, metric reset
+
+GeoGebra core tools by capability:
+
+- Construction and editing: `geogebra_eval_command`, `geogebra_eval_commands`, `geogebra_create_point`, `geogebra_create_line`, `geogebra_create_circle`, `geogebra_create_polygon`, `geogebra_create_line_segment`, `geogebra_create_text`, `geogebra_create_slider`
+- Object/query and canvas management: `geogebra_get_objects`, `geogebra_clear_construction`, `geogebra_instance_status`, `geogebra_auto_zoom`
+- Import/export: `geogebra_export_png`, `geogebra_export_svg`, `geogebra_export_pdf`, `geogebra_export_ggb`, `geogebra_load_ggb`
+- Plotting and curves: `geogebra_plot_function`, `geogebra_plot_parametric`, `geogebra_plot_implicit`
+- CAS and symbolic math: `geogebra_solve_equation`, `geogebra_solve_system`, `geogebra_differentiate`, `geogebra_integrate`, `geogebra_simplify`
+- Animation: `geogebra_animate_parameter`, `geogebra_trace_object`, `geogebra_start_animation`, `geogebra_stop_animation`, `geogebra_animation_status`, `geogebra_export_animation`, `geogebra_animation_demo`
+- LLM-oriented helper: `geogebra_get_prompt_framework`
 
 ## CLI Options
 
