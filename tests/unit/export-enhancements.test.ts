@@ -192,9 +192,9 @@ describe('Enhanced Export Functionality (GEB-4)', () => {
       expect(result.content[0]?.type).toBe('text');
       const response = JSON.parse(result.content[0]?.text!);
       
-      // Should still work with the provided scale (mock doesn't validate)
+      // Invalid values are clamped for safer export behavior
       expect(response.success).toBe(true);
-      expect(response.scale).toBe(-1);
+      expect(response.scale).toBe(0.1);
     });
   });
 }); 

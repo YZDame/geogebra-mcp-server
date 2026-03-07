@@ -79,6 +79,40 @@ process.on('SIGINT', () => {
   process.exit(0);
 });
 
+function getWorkspaceDir(): string {
+  return process.env['VSCODE_WORKSPACE_FOLDER'] || process.cwd();
+}
+
+function getRequestedFilename(params: Record<string, unknown>): string | undefined {
+  const filename = params['filename'] as string | undefined;
+  const outputPath = params['outputPath'] as string | undefined;
+  return filename || outputPath;
+}
+
+async function saveExportFile(
+  instance: GeoGebraInstance,
+  params: Record<string, unknown>,
+  data: string,
+  encoding: 'base64' | BufferEncoding
+): Promise<string | undefined> {
+  const requestedFilename = getRequestedFilename(params);
+  if (!requestedFilename) {
+    return undefined;
+  }
+
+  const workspaceDir = getWorkspaceDir();
+  const fullPath = instance.validateFilePath(requestedFilename, workspaceDir);
+  await fs.promises.mkdir(path.dirname(fullPath), { recursive: true });
+
+  if (encoding === 'base64') {
+    await fs.promises.writeFile(fullPath, Buffer.from(data, 'base64'));
+  } else {
+    await fs.promises.writeFile(fullPath, data, encoding);
+  }
+
+  return fullPath;
+}
+
 /**
  * GeoGebra MCP Tools
  */
@@ -118,6 +152,116 @@ export const geogebraTools: ToolDefinition[] = [
         };
       } catch (error) {
         logger.error('Failed to execute GeoGebra command', error);
+        return {
+          content: [{
+            type: 'text' as const,
+            text: JSON.stringify({
+              success: false,
+              error: error instanceof Error ? error.message : String(error)
+            }, null, 2)
+          }],
+          isError: true
+        };
+      }
+    }
+  },
+
+  {
+    tool: {
+      name: 'geogebra_eval_commands',
+      description: 'Execute multiple GeoGebra commands sequentially in one call to reduce round-trip overhead',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          commands: {
+            type: 'array',
+            items: {
+              type: 'string'
+            },
+            description: 'GeoGebra commands to run in order (e.g., ["A=(0,0)", "B=(4,0)", "c=Circle(A,3)"])',
+            minItems: 1
+          },
+          stopOnError: {
+            type: 'boolean',
+            description: 'Stop immediately when a command fails (default: true)'
+          }
+        },
+        required: ['commands']
+      }
+    },
+    handler: async (params) => {
+      try {
+        const commands = params['commands'] as string[];
+        const stopOnError = params['stopOnError'] !== undefined ? Boolean(params['stopOnError']) : true;
+
+        if (!Array.isArray(commands) || commands.length === 0) {
+          throw new Error('commands must be a non-empty string array');
+        }
+
+        if (commands.length > 500) {
+          throw new Error('Too many commands in one call. Maximum is 500');
+        }
+
+        const instance = await instancePool.getDefaultInstance();
+        const results: Array<{ index: number; command: string; success: boolean; result?: unknown; error?: string }> = [];
+
+        for (let i = 0; i < commands.length; i++) {
+          const command = commands[i];
+          if (typeof command !== 'string' || !command.trim()) {
+            results.push({
+              index: i,
+              command: String(command),
+              success: false,
+              error: 'Command must be a non-empty string'
+            });
+            if (stopOnError) {
+              break;
+            }
+            continue;
+          }
+
+          const execution = await instance.evalCommand(command);
+          const commandResult: { index: number; command: string; success: boolean; result?: unknown; error?: string } = {
+            index: i,
+            command,
+            success: execution.success
+          };
+
+          if (execution.result !== undefined) {
+            commandResult.result = execution.result;
+          }
+          if (execution.error !== undefined) {
+            commandResult.error = execution.error;
+          }
+
+          results.push(commandResult);
+
+          if (!execution.success && stopOnError) {
+            break;
+          }
+        }
+
+        const successCount = results.filter(result => result.success).length;
+        const failureCount = results.length - successCount;
+        const completedAll = results.length === commands.length;
+
+        return {
+          content: [{
+            type: 'text' as const,
+            text: JSON.stringify({
+              success: failureCount === 0,
+              stopOnError,
+              requested: commands.length,
+              executed: results.length,
+              completedAll,
+              successCount,
+              failureCount,
+              results
+            }, null, 2)
+          }]
+        };
+      } catch (error) {
+        logger.error('Failed to execute batch commands', error);
         return {
           content: [{
             type: 'text' as const,
@@ -806,6 +950,10 @@ export const geogebraTools: ToolDefinition[] = [
             type: 'string',
             description: 'Output filename for the PNG file (e.g., "ellipse.png"). If provided, saves to file instead of returning base64.'
           },
+          outputPath: {
+            type: 'string',
+            description: 'Alias of filename. Relative path inside workspace (e.g., "output/ellipse.png").'
+          },
           scale: {
             type: 'number',
             description: 'Scale factor for the exported image (default: 1)'
@@ -869,7 +1017,7 @@ export const geogebraTools: ToolDefinition[] = [
     handler: async (params) => {
       try {
         // Input validation with safe defaults
-        const filename = params['filename'] as string | undefined;
+        const requestedFilename = getRequestedFilename(params);
         let scale = (params['scale'] as number) || 1;
         let width = params['width'] as number;
         let height = params['height'] as number;
@@ -928,12 +1076,8 @@ export const geogebraTools: ToolDefinition[] = [
         // Export with enhanced parameters
         const pngBase64 = await instance.exportPNG(scale, transparent, dpi, width, height);
         
-        // If filename is provided, save to file
-        if (filename) {
-          const workspaceDir = process.env['VSCODE_WORKSPACE_FOLDER'] || process.cwd();
-          const fullPath = instance['validateFilePath'](filename, workspaceDir);
-          const buffer = Buffer.from(pngBase64, 'base64');
-          await fs.promises.writeFile(fullPath, buffer);
+        const savedPath = await saveExportFile(instance, params, pngBase64, 'base64');
+        if (savedPath) {
           
           return {
             content: [{
@@ -942,7 +1086,7 @@ export const geogebraTools: ToolDefinition[] = [
                 success: true,
                 format: 'PNG',
                 saved: true,
-                filename: fullPath,
+                filename: savedPath,
                 scale,
                 width,
                 height,
@@ -964,6 +1108,7 @@ export const geogebraTools: ToolDefinition[] = [
             text: JSON.stringify({
               success: true,
               format: 'PNG',
+              saveTarget: requestedFilename,
               scale,
               width,
               height,
@@ -1006,6 +1151,10 @@ export const geogebraTools: ToolDefinition[] = [
             type: 'string',
             description: 'Output filename for the SVG file (e.g., "diagram.svg"). If provided, saves to file instead of returning SVG data.'
           },
+          outputPath: {
+            type: 'string',
+            description: 'Alias of filename. Relative path inside workspace (e.g., "output/diagram.svg").'
+          },
           xmin: {
             type: 'number',
             description: 'Minimum x-coordinate for view range'
@@ -1044,7 +1193,7 @@ export const geogebraTools: ToolDefinition[] = [
     },
     handler: async (params) => {
       try {
-        const filename = params['filename'] as string | undefined;
+        const requestedFilename = getRequestedFilename(params);
         let xmin = params['xmin'] as number;
         let xmax = params['xmax'] as number;
         let ymin = params['ymin'] as number;
@@ -1058,58 +1207,12 @@ export const geogebraTools: ToolDefinition[] = [
         
         // Auto-zoom if requested (and manual coordinates not provided)
         if (autoZoom && xmin === undefined && xmax === undefined && ymin === undefined && ymax === undefined) {
-          const objectNames = await instance.getAllObjectNames();
-          const allObjects = [];
-          for (const name of objectNames) {
-            const info = await instance.getObjectInfo(name);
-            if (info) {
-              allObjects.push(info);
-            }
-          }
-          
-          const visiblePoints = allObjects.filter((obj: any) =>
-            obj.type === 'point' && obj.visible && obj.defined &&
-            typeof obj.x === 'number' && typeof obj.y === 'number'
-          );
-          
-          if (visiblePoints.length > 0) {
-            let minX = Infinity;
-            let maxX = -Infinity;
-            let minY = Infinity;
-            let maxY = -Infinity;
-            
-            for (const point of visiblePoints) {
-              minX = Math.min(minX, point.x!);
-              maxX = Math.max(maxX, point.x!);
-              minY = Math.min(minY, point.y!);
-              maxY = Math.max(maxY, point.y!);
-            }
-            
-            let rangeX = maxX - minX;
-            let rangeY = maxY - minY;
-            const minRange = 2;
-            
-            if (rangeX < minRange) {
-              const center = (minX + maxX) / 2;
-              minX = center - minRange / 2;
-              maxX = center + minRange / 2;
-              rangeX = minRange;
-            }
-            
-            if (rangeY < minRange) {
-              const center = (minY + maxY) / 2;
-              minY = center - minRange / 2;
-              maxY = center + minRange / 2;
-              rangeY = minRange;
-            }
-            
-            const padX = rangeX * zoomPadding;
-            const padY = rangeY * zoomPadding;
-            
-            xmin = minX - padX;
-            xmax = maxX + padX;
-            ymin = minY - padY;
-            ymax = maxY + padY;
+          const coords = await instance.calculateAutoZoomCoordinates(zoomPadding, 2);
+          if (coords) {
+            xmin = coords.xmin;
+            xmax = coords.xmax;
+            ymin = coords.ymin;
+            ymax = coords.ymax;
           }
         }
         
@@ -1128,11 +1231,8 @@ export const geogebraTools: ToolDefinition[] = [
         
         const svg = await instance.exportSVG();
         
-        // If filename is provided, save to file
-        if (filename) {
-          const workspaceDir = process.env['VSCODE_WORKSPACE_FOLDER'] || process.cwd();
-          const fullPath = path.resolve(workspaceDir, filename);
-          fs.writeFileSync(fullPath, svg, 'utf8');
+        const savedPath = await saveExportFile(instance, params, svg, 'utf8');
+        if (savedPath) {
           
           return {
             content: [{
@@ -1141,7 +1241,7 @@ export const geogebraTools: ToolDefinition[] = [
                 success: true,
                 format: 'SVG',
                 saved: true,
-                filename: fullPath,
+                filename: savedPath,
                 viewSettings: {
                   coordSystem: (xmin !== undefined && xmax !== undefined && ymin !== undefined && ymax !== undefined) ? { xmin, xmax, ymin, ymax } : undefined,
                   showAxes,
@@ -1158,6 +1258,7 @@ export const geogebraTools: ToolDefinition[] = [
             text: JSON.stringify({
               success: true,
               format: 'SVG',
+              saveTarget: requestedFilename,
               viewSettings: {
                 coordSystem: (xmin !== undefined && xmax !== undefined && ymin !== undefined && ymax !== undefined) ? { xmin, xmax, ymin, ymax } : undefined,
                 showAxes,
@@ -1195,6 +1296,10 @@ export const geogebraTools: ToolDefinition[] = [
             type: 'string',
             description: 'Output filename for the PDF file (e.g., "diagram.pdf"). If provided, saves to file instead of returning base64.'
           },
+          outputPath: {
+            type: 'string',
+            description: 'Alias of filename. Relative path inside workspace (e.g., "output/diagram.pdf").'
+          },
           autoZoom: {
             type: 'boolean',
             description: 'Automatically zoom to fit all visible objects before exporting (default: false)'
@@ -1202,6 +1307,10 @@ export const geogebraTools: ToolDefinition[] = [
           zoomPadding: {
             type: 'number',
             description: 'Padding percentage for auto-zoom (default: 0.2 for 20% margin)'
+          },
+          minRange: {
+            type: 'number',
+            description: 'Minimum range for each axis when auto-zooming (default: 2)'
           }
         },
         required: []
@@ -1209,7 +1318,7 @@ export const geogebraTools: ToolDefinition[] = [
     },
     handler: async (params) => {
       try {
-        const filename = params['filename'] as string | undefined;
+        const requestedFilename = getRequestedFilename(params);
         const autoZoom = (params['autoZoom'] as boolean) || false;
         const zoomPadding = (params['zoomPadding'] as number) ?? 0.2;
         const minRange = (params['minRange'] as number) ?? 2;
@@ -1223,12 +1332,8 @@ export const geogebraTools: ToolDefinition[] = [
         
         const pdfBase64 = await instance.exportPDF();
         
-        // If filename is provided, save to file
-        if (filename) {
-          const workspaceDir = process.env['VSCODE_WORKSPACE_FOLDER'] || process.cwd();
-          const fullPath = instance['validateFilePath'](filename, workspaceDir);
-          const buffer = Buffer.from(pdfBase64, 'base64');
-          await fs.promises.writeFile(fullPath, buffer);
+        const savedPath = await saveExportFile(instance, params, pdfBase64, 'base64');
+        if (savedPath) {
           
           return {
             content: [{
@@ -1237,7 +1342,7 @@ export const geogebraTools: ToolDefinition[] = [
                 success: true,
                 format: 'PDF',
                 saved: true,
-                filename: fullPath
+                filename: savedPath
               }, null, 2)
             }]
           };
@@ -1249,6 +1354,7 @@ export const geogebraTools: ToolDefinition[] = [
             text: JSON.stringify({
               success: true,
               format: 'PDF',
+              saveTarget: requestedFilename,
               data: pdfBase64,
               encoding: 'base64'
             }, null, 2)
@@ -1281,6 +1387,10 @@ export const geogebraTools: ToolDefinition[] = [
             type: 'string',
             description: 'Output filename for the GGB file (e.g., "construction.ggb"). If provided, saves to file instead of returning base64.'
           },
+          outputPath: {
+            type: 'string',
+            description: 'Alias of filename. Relative path inside workspace (e.g., "output/construction.ggb").'
+          },
           autoZoom: {
             type: 'boolean',
             description: 'Automatically zoom to fit all visible objects before exporting (default: false)'
@@ -1299,7 +1409,7 @@ export const geogebraTools: ToolDefinition[] = [
     },
     handler: async (params) => {
       try {
-        const filename = params['filename'] as string | undefined;
+        const requestedFilename = getRequestedFilename(params);
         const autoZoom = (params['autoZoom'] as boolean) || false;
         const zoomPadding = (params['zoomPadding'] as number) ?? 0.2;
         const minRange = (params['minRange'] as number) ?? 2;
@@ -1313,12 +1423,8 @@ export const geogebraTools: ToolDefinition[] = [
         
         const ggbBase64 = await instance.exportGGB();
         
-        // If filename is provided, save to file
-        if (filename) {
-          const workspaceDir = process.env['VSCODE_WORKSPACE_FOLDER'] || process.cwd();
-          const fullPath = instance['validateFilePath'](filename, workspaceDir);
-          const buffer = Buffer.from(ggbBase64, 'base64');
-          await fs.promises.writeFile(fullPath, buffer);
+        const savedPath = await saveExportFile(instance, params, ggbBase64, 'base64');
+        if (savedPath) {
           
           return {
             content: [{
@@ -1327,7 +1433,7 @@ export const geogebraTools: ToolDefinition[] = [
                 success: true,
                 format: 'GGB',
                 saved: true,
-                filename: fullPath
+                filename: savedPath
               }, null, 2)
             }]
           };
@@ -1339,6 +1445,7 @@ export const geogebraTools: ToolDefinition[] = [
             text: JSON.stringify({
               success: true,
               format: 'GGB',
+              saveTarget: requestedFilename,
               data: ggbBase64,
               encoding: 'base64'
             }, null, 2)

@@ -1,6 +1,7 @@
 import { McpTool, ToolDefinition } from '../types/mcp';
 import { errors } from '../utils/errors';
 import logger from '../utils/logger';
+import { getAppInfo } from '../utils/app-info';
 import { geogebraTools } from './geogebra-tools';
 import { educationalTemplateTools } from './educational-templates';
 import { performanceTools } from './performance-tools';
@@ -8,6 +9,7 @@ import { performanceTools } from './performance-tools';
 // Check if we're in MCP mode (stdio communication)
 // When piping input, process.stdin.isTTY is undefined, not false
 const isMcpMode = !process.stdin.isTTY;
+const appInfo = getAppInfo();
 
 /**
  * Tool Registry for managing MCP tools
@@ -144,8 +146,8 @@ const exampleTools: ToolDefinition[] = [
           type: 'text' as const,
           text: JSON.stringify({
             name: 'GeoGebra MCP Tool',
-            version: '1.0.0',
-            description: 'Model Context Protocol server for GeoGebra mathematical visualization',
+            version: appInfo.version,
+            description: appInfo.description,
             toolCount: toolRegistry.getToolCount(),
             timestamp: new Date().toISOString()
           }, null, 2)

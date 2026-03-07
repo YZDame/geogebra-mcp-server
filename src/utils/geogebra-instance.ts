@@ -1114,7 +1114,7 @@ export class GeoGebraInstance implements GeoGebraAPI {
    * @returns The validated absolute path
    * @throws Error if path is outside workspace
    */
-  private validateFilePath(filePath: string, workspaceDir: string): string {
+  public validateFilePath(filePath: string, workspaceDir: string): string {
     const path = require('path');
     const fullPath = path.resolve(workspaceDir, filePath);
     const normalizedWorkspace = path.resolve(workspaceDir);

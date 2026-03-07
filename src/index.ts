@@ -2,17 +2,20 @@ import 'dotenv/config';
 import { McpServer } from './server';
 import { McpServerConfig } from './types/mcp';
 import logger from './utils/logger';
+import { getAppInfo } from './utils/app-info';
 
 /**
  * Main entry point for the GeoGebra MCP Tool server
  */
 async function main() {
   try {
+    const appInfo = getAppInfo();
+
     // Server configuration
     const config: McpServerConfig = {
       name: 'GeoGebra MCP Tool',
-      version: '1.0.0',
-      description: 'Model Context Protocol server for GeoGebra mathematical visualization',
+      version: appInfo.version,
+      description: appInfo.description,
       logLevel: (process.env['LOG_LEVEL'] as 'error' | 'warn' | 'info' | 'debug') || 'info'
     };
 

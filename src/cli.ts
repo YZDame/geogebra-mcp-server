@@ -9,6 +9,9 @@
  * Display help information
  */
 function showHelp() {
+  const packageJson = require('../package.json');
+  const homepage = packageJson.homepage || 'https://github.com/gebrai/gebrai';
+
   console.log(`
 GeoGebra MCP Tool - Mathematical Visualization via Model Context Protocol
 
@@ -26,7 +29,7 @@ Examples:
   npx @gebrai/gebrai --log-level debug  # Start with debug logging
   npx @gebrai/gebrai --help             # Show this help
 
-For more information, visit: https://github.com/your-org/gebrai
+For more information, visit: ${homepage}
 `);
 }
 
@@ -128,13 +131,15 @@ async function main() {
     // Only import heavy dependencies if we're actually starting the server
     await import('dotenv/config');
     const { McpServer } = await import('./server');
+    const { getAppInfo } = await import('./utils/app-info');
     const { default: logger } = await import('./utils/logger');
+    const appInfo = getAppInfo();
 
     // Server configuration
     const config = {
       name: 'GeoGebra MCP Tool',
-      version: '1.0.0',
-      description: 'Model Context Protocol server for GeoGebra mathematical visualization',
+      version: appInfo.version,
+      description: appInfo.description,
       logLevel: options.logLevel as 'error' | 'warn' | 'info' | 'debug'
     };
 

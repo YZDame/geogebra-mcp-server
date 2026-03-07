@@ -85,6 +85,7 @@ public
 # Temporary folders
 tmp/
 temp/
+output/
 
 # Editor directories and files
 .vscode/

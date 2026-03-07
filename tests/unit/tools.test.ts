@@ -76,6 +76,7 @@ describe('ToolRegistry', () => {
       const toolNames = tools.map(tool => tool.name);
 
       expect(toolNames).toContain('geogebra_eval_command');
+      expect(toolNames).toContain('geogebra_eval_commands');
       expect(toolNames).toContain('geogebra_create_point');
       expect(toolNames).toContain('geogebra_create_line');
       expect(toolNames).toContain('geogebra_create_circle');
@@ -199,6 +200,45 @@ describe('ToolRegistry', () => {
         const response = JSON.parse(result.content[0]?.text!);
         expect(response.success).toBe(false);
         expect(response.error).toContain('command');
+      });
+    });
+
+    describe('geogebra_eval_commands tool', () => {
+      it('should execute multiple commands in order', async () => {
+        mockGeoGebraInstance.evalCommand
+          .mockResolvedValueOnce({ success: true, result: 'ok-1' } as any)
+          .mockResolvedValueOnce({ success: true, result: 'ok-2' } as any);
+
+        const result = await registry.executeTool('geogebra_eval_commands', {
+          commands: ['A=(0,0)', 'B=(1,0)']
+        });
+
+        expect(mockGeoGebraInstance.evalCommand).toHaveBeenCalledTimes(2);
+        expect(mockGeoGebraInstance.evalCommand).toHaveBeenNthCalledWith(1, 'A=(0,0)');
+        expect(mockGeoGebraInstance.evalCommand).toHaveBeenNthCalledWith(2, 'B=(1,0)');
+
+        const response = JSON.parse(result.content[0]?.text!);
+        expect(response.success).toBe(true);
+        expect(response.executed).toBe(2);
+        expect(response.failureCount).toBe(0);
+      });
+
+      it('should stop on first failure by default', async () => {
+        mockGeoGebraInstance.evalCommand
+          .mockResolvedValueOnce({ success: false, error: 'bad command' } as any)
+          .mockResolvedValueOnce({ success: true, result: 'should-not-run' } as any);
+
+        const result = await registry.executeTool('geogebra_eval_commands', {
+          commands: ['BadCmd()', 'A=(0,0)']
+        });
+
+        expect(mockGeoGebraInstance.evalCommand).toHaveBeenCalledTimes(1);
+
+        const response = JSON.parse(result.content[0]?.text!);
+        expect(response.success).toBe(false);
+        expect(response.completedAll).toBe(false);
+        expect(response.executed).toBe(1);
+        expect(response.failureCount).toBe(1);
       });
     });
 

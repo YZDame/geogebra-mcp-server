@@ -39,6 +39,17 @@ npx @gebrai/gebrai --log-level debug
 
 **Need help?** Check our [Getting Started Guide](docs/guides/getting-started.md) for detailed instructions.
 
+## ⚡ Fast `.ggb` Workflow
+
+For production-oriented usage (natural language -> MCP -> `.ggb`), see:
+
+- [Production Workflow](docs/guides/production-workflow.md)
+
+This includes:
+- minimal required files vs optional files
+- local fork vs npm version behavior
+- the fastest 3-step tool path using `geogebra_eval_commands` + `geogebra_export_ggb`
+
 ## 📦 Installation Options
 
 ### NPX (No Installation)
