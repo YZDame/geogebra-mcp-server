@@ -22,6 +22,9 @@ jobs:
           node-version: 20
           registry-url: https://registry.npmjs.org
 
+      - name: Remove auth token for OIDC trusted publishing
+        run: sed -i '/_authToken/d' ~/.npmrc
+
       - name: Install dependencies
         run: npm ci
 
@@ -34,5 +37,3 @@ jobs:
 
       - name: Publish to npm
         run: npm publish --access public --provenance
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
