@@ -3,7 +3,6 @@ name: Publish npm
 on:
   release:
     types: [published]
-  workflow_dispatch:
 
 permissions:
   contents: read
@@ -12,12 +11,10 @@ permissions:
 jobs:
   publish:
     runs-on: ubuntu-latest
-    env:
-      NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v5
+        uses: actions/checkout@v4
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
@@ -32,15 +29,7 @@ jobs:
         run: npm run build
 
       - name: Test
-        continue-on-error: true
         run: npm test
 
-      - name: Publish to npm (token auth)
-        if: ${{ env.NPM_TOKEN != '' }}
-        run: npm publish --access public --provenance
-        env:
-          NODE_AUTH_TOKEN: ${{ env.NPM_TOKEN }}
-
-      - name: Publish to npm (trusted publishing)
-        if: ${{ env.NPM_TOKEN == '' }}
+      - name: Publish to npm
         run: npm publish --access public --provenance
