@@ -2,6 +2,25 @@
 
 GeoGebra 的 MCP Server，用于几何构造、函数绘图与文件导出（支持 `.ggb`）。
 
+## 来源与 Fork 说明
+
+- 本项目 Fork 自 [efebausal/gebrai](https://github.com/efebausal/gebrai)。
+- 上游仓库采用 MIT 许可证，本项目继续保留 MIT 许可证与原始版权声明。
+- 当前 Fork 独立维护，使用独立的发布节奏与 npm 包名。
+
+## 从 `@gebrai/gebrai` 迁移
+
+如果你之前使用旧包名，请按下面迁移：
+
+1. 替换安装/运行命令：
+   - 旧：`npx @gebrai/gebrai`
+   - 新：`npx @yzdame/geogebra-mcp-server`
+2. 替换全局 CLI 命令：
+   - 旧：`gebrai`
+   - 新：`geogebra-mcp`
+3. 更新 MCP 配置里的本地路径到当前仓库/包目录：
+   - 示例：`.../geogebra-mcp-server/dist/cli.js`
+
 ## 项目定位
 
 - 这是一个 **MCP Server**，不是聊天应用本身。
@@ -26,9 +45,9 @@ node dist/cli.js
 也可以：
 
 ```bash
-npx @gebrai/gebrai
+npx @yzdame/geogebra-mcp-server
 # 或全局安装后
-gebrai
+geogebra-mcp
 ```
 
 ### 3. 作为 MCP 接入客户端
@@ -40,7 +59,7 @@ gebrai
   "mcpServers": {
     "geogebra": {
       "command": "node",
-      "args": ["/你的绝对路径/gebrai/dist/cli.js"]
+      "args": ["/你的绝对路径/geogebra-mcp-server/dist/cli.js"]
     }
   }
 }

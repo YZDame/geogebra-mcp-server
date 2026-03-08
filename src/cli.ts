@@ -2,7 +2,7 @@
 
 /**
  * CLI entry point for GeoGebra MCP Tool
- * Enables npx usage: npx @gebrai/gebrai
+ * Enables npx usage: npx @yzdame/geogebra-mcp-server
  */
 
 /**
@@ -10,13 +10,13 @@
  */
 function showHelp() {
   const packageJson = require('../package.json');
-  const homepage = packageJson.homepage || 'https://github.com/gebrai/gebrai';
+  const homepage = packageJson.homepage || 'https://github.com/YZDame/geogebra-mcp-server';
 
   console.log(`
 GeoGebra MCP Tool - Mathematical Visualization via Model Context Protocol
 
 Usage:
-  npx @gebrai/gebrai [options]
+  npx @yzdame/geogebra-mcp-server [options]
 
 Options:
   -h, --help        Show this help message
@@ -25,9 +25,9 @@ Options:
   --port PORT       Set server port [default: from stdin/stdout for MCP]
 
 Examples:
-  npx @gebrai/gebrai                    # Start MCP server on stdin/stdout
-  npx @gebrai/gebrai --log-level debug  # Start with debug logging
-  npx @gebrai/gebrai --help             # Show this help
+  npx @yzdame/geogebra-mcp-server                    # Start MCP server on stdin/stdout
+  npx @yzdame/geogebra-mcp-server --log-level debug  # Start with debug logging
+  npx @yzdame/geogebra-mcp-server --help             # Show this help
 
 For more information, visit: ${homepage}
 `);

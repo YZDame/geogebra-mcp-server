@@ -4,6 +4,25 @@ A GeoGebra MCP server for geometric construction, function plotting, and file ex
 
 中文说明请看: [README.zh-CN.md](README.zh-CN.md)
 
+## Origin and Fork Policy
+
+- This project is forked from [efebausal/gebrai](https://github.com/efebausal/gebrai).
+- The upstream repository is MIT licensed, and this project keeps the MIT license and attribution.
+- This fork is maintained independently with its own release cycle and npm package name.
+
+## Migration from `@gebrai/gebrai`
+
+If you were using the older package name:
+
+1. Replace install/run commands:
+   - Old: `npx @gebrai/gebrai`
+   - New: `npx @yzdame/geogebra-mcp-server`
+2. Replace global CLI command:
+   - Old: `gebrai`
+   - New: `geogebra-mcp`
+3. Update MCP config path to this repository/package location:
+   - Example: `.../geogebra-mcp-server/dist/cli.js`
+
 ## What This Project Is
 
 - This is an **MCP server**, not a chat app.
@@ -28,9 +47,9 @@ node dist/cli.js
 Or:
 
 ```bash
-npx @gebrai/gebrai
+npx @yzdame/geogebra-mcp-server
 # or after global install
-gebrai
+geogebra-mcp
 ```
 
 ### 3. Connect as MCP
@@ -42,7 +61,7 @@ Claude Desktop example:
   "mcpServers": {
     "geogebra": {
       "command": "node",
-      "args": ["/absolute/path/to/gebrai/dist/cli.js"]
+      "args": ["/absolute/path/to/geogebra-mcp-server/dist/cli.js"]
     }
   }
 }
