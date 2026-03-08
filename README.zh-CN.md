@@ -29,14 +29,33 @@ GeoGebra 的 MCP Server，用于几何构造、函数绘图与文件导出（支
 
 ## 快速开始
 
-### 1. 安装并构建
+### 1. 通过 npm 安装
+
+```bash
+npm i @lydt/geogebra-mcp-server
+```
+
+可直接运行：
+
+```bash
+npx @lydt/geogebra-mcp-server
+```
+
+或全局安装：
+
+```bash
+npm i -g @lydt/geogebra-mcp-server
+geogebra-mcp
+```
+
+### 2. 从源码安装并构建
 
 ```bash
 npm install
 npm run build
 ```
 
-### 2. 启动服务
+### 3. 启动服务
 
 ```bash
 node dist/cli.js
@@ -50,7 +69,7 @@ npx @lydt/geogebra-mcp-server
 geogebra-mcp
 ```
 
-### 3. 作为 MCP 接入客户端
+### 4. 作为 MCP 接入客户端
 
 以 Claude Desktop 为例：
 

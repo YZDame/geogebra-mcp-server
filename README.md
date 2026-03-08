@@ -31,14 +31,33 @@ If you were using the older package name:
 
 ## Quick Start
 
-### 1. Install and Build
+### 1. Install from npm
+
+```bash
+npm i @lydt/geogebra-mcp-server
+```
+
+You can run it directly:
+
+```bash
+npx @lydt/geogebra-mcp-server
+```
+
+Or install globally:
+
+```bash
+npm i -g @lydt/geogebra-mcp-server
+geogebra-mcp
+```
+
+### 2. Install and Build from source
 
 ```bash
 npm install
 npm run build
 ```
 
-### 2. Run Server
+### 3. Run Server
 
 ```bash
 node dist/cli.js
@@ -52,7 +71,7 @@ npx @lydt/geogebra-mcp-server
 geogebra-mcp
 ```
 
-### 3. Connect as MCP
+### 4. Connect as MCP
 
 Claude Desktop example:
 
