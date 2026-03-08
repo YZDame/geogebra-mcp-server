@@ -16,7 +16,7 @@ If you were using the older package name:
 
 1. Replace install/run commands:
    - Old: `npx @gebrai/gebrai`
-   - New: `npx @yzdame/geogebra-mcp-server`
+   - New: `npx @lydt/geogebra-mcp-server`
 2. Replace global CLI command:
    - Old: `gebrai`
    - New: `geogebra-mcp`
@@ -47,7 +47,7 @@ node dist/cli.js
 Or:
 
 ```bash
-npx @yzdame/geogebra-mcp-server
+npx @lydt/geogebra-mcp-server
 # or after global install
 geogebra-mcp
 ```

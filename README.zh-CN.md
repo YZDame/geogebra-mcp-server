@@ -14,7 +14,7 @@ GeoGebra 的 MCP Server，用于几何构造、函数绘图与文件导出（支
 
 1. 替换安装/运行命令：
    - 旧：`npx @gebrai/gebrai`
-   - 新：`npx @yzdame/geogebra-mcp-server`
+   - 新：`npx @lydt/geogebra-mcp-server`
 2. 替换全局 CLI 命令：
    - 旧：`gebrai`
    - 新：`geogebra-mcp`
@@ -45,7 +45,7 @@ node dist/cli.js
 也可以：
 
 ```bash
-npx @yzdame/geogebra-mcp-server
+npx @lydt/geogebra-mcp-server
 # 或全局安装后
 geogebra-mcp
 ```
