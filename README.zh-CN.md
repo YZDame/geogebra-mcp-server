@@ -1,5 +1,10 @@
 # GeoGebra MCP Tool
 
+[![npm version](https://img.shields.io/npm/v/%40lydt%2Fgeogebra-mcp-server)](https://www.npmjs.com/package/@lydt/geogebra-mcp-server)
+[![Publish npm](https://github.com/YZDame/geogebra-mcp-server/actions/workflows/publish-npm.yml/badge.svg)](https://github.com/YZDame/geogebra-mcp-server/actions/workflows/publish-npm.yml)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://github.com/YZDame/geogebra-mcp-server/blob/main/LICENSE)
+![Node >=18](https://img.shields.io/badge/node-%3E%3D18-339933)
+
 GeoGebra 的 MCP Server，用于几何构造、函数绘图与文件导出（支持 `.ggb`）。
 
 ## 来源与 Fork 说明
